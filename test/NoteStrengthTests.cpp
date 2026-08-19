@@ -3,6 +3,8 @@
 
 #include <chalkwalk/music/NoteStrength.h>
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
 using namespace chalkwalk::music;
@@ -22,25 +24,37 @@ SoundingChord dMinor()  { return chordOf(2, {0, 3, 7}); }
 // The constraint that made this mergeable: with no chart, nothing changes.
 // ===========================================================================
 
-TEST_CASE("with no chord, strength is exactly the scale-only ranking",
+// With no chord the ORDER over scale tones must be what the scale-only model
+// gave, because Lockstep's melody pool is scale-only and its output must not
+// move. The absolute numbers change (they are now tier-offset); the ordering
+// does not.
+TEST_CASE("with no chord, the order over scale tones is unchanged",
           "[strength][contract]") {
   for (int root = 0; root < 12; ++root)
     for (int brightness = kLocrian; brightness <= kLydian; ++brightness) {
       const KeySig k{root, static_cast<int8_t>(brightness), {},
                      ScaleType::Diatonic};
-      for (int pc = 0; pc < 12; ++pc) {
-        INFO("root " << root << " brightness " << brightness << " pc " << pc);
-        REQUIRE(noteStrength(k, pc) == noteStrengthRank(k, pc));
-        REQUIRE(noteStrength(k, pc, SoundingChord{}) == noteStrengthRank(k, pc));
-      }
+      const uint16_t mask = pcMask(k);
+      for (int a = 0; a < 12; ++a)
+        for (int b = 0; b < 12; ++b) {
+          if (!maskHas(mask, a) || !maskHas(mask, b))
+            continue;
+          INFO("root " << root << " brightness " << brightness << " pcs " << a
+                       << " vs " << b);
+          const bool oldOrder = noteStrengthRank(k, a) < noteStrengthRank(k, b);
+          const bool newOrder = noteStrength(k, a) < noteStrength(k, b);
+          REQUIRE(oldOrder == newOrder);
+        }
     }
 }
 
 TEST_CASE("with no chart the ceiling ladder is the scale-only one",
           "[strength][contract]") {
-  CHECK(rankCeiling(4, false) == 2);
-  CHECK(rankCeiling(3, false) == 2);
-  CHECK(rankCeiling(2, false) == 4);
+  // The same SET of notes as before, expressed on the tier scale: a caller
+  // with no chart only ever sees tiers 2, 3 and 5.
+  CHECK(rankCeiling(4, false) == 3 * kTierStride + 2);
+  CHECK(rankCeiling(3, false) == 3 * kTierStride + 2);
+  CHECK(rankCeiling(2, false) == 3 * kTierStride + 4);
   CHECK(rankCeiling(1, false) == 1000);
   CHECK(rankCeiling(0, false) == 1000);
 }
@@ -94,8 +108,8 @@ TEST_CASE("a chord tone is never treated as a clash", "[strength][chord]") {
 
   const int c = noteStrength(cIonian, 0, chord);
   INFO("C in Cmaj7 ranks " << c);
-  REQUIRE(c < kNonChordTonePenalty);
-  REQUIRE(c == noteStrengthRank(cIonian, 0));  // undemoted
+  REQUIRE(tierOf(cIonian, 0, chord) == Tier::ChordRoot);
+
 }
 
 TEST_CASE("the chord moves the ranking with it", "[strength][chord]") {
@@ -104,7 +118,7 @@ TEST_CASE("the chord moves the ranking with it", "[strength][chord]") {
   const int fOverDm = noteStrength(cIonian, 5, dMinor());
   INFO("F over C " << fOverC << ", F over Dm " << fOverDm);
   REQUIRE(fOverDm < fOverC);
-  REQUIRE(fOverDm < kNonChordTonePenalty);
+  REQUIRE(tierOf(cIonian, 5, dMinor()) == Tier::ChordTone);
 }
 
 // ===========================================================================
@@ -115,7 +129,7 @@ TEST_CASE("Ionian's fourth clashes over the tonic chord", "[strength][clash]") {
   // F is a semitone above E, which C major is sounding.
   const int f = noteStrength(cIonian, 5, cMajor());
   INFO("F over C major ranks " << f);
-  REQUIRE(f >= kNonChordTonePenalty + kClashPenalty);
+  REQUIRE(tierOf(cIonian, 5, cMajor()) == Tier::ScaleClash);
 }
 
 // The reason to derive the rule rather than list avoid notes per mode: the
@@ -126,26 +140,62 @@ TEST_CASE("Lydian's sharp fourth is spared", "[strength][clash]") {
   const KeySig cLydian{0, kLydian, {}, ScaleType::Diatonic};
   const int fSharp = noteStrength(cLydian, 6, cMajor());
   INFO("F# over C major in Lydian ranks " << fSharp);
-  REQUIRE(fSharp < kNonChordTonePenalty + kClashPenalty);
+  REQUIRE(tierOf(cLydian, 6, cMajor()) != Tier::ScaleClash);
 }
 
-TEST_CASE("a clash always ranks worse than any non-clashing note",
+TEST_CASE("within the scale, a clash ranks worse than anything that does not",
           "[strength][clash]") {
   const auto chord = cMajor();
+  const uint16_t mask = pcMask(cIonian);
   int worstNonClash = -1;
   int bestClash = 10000;
 
   for (int pc = 0; pc < 12; ++pc) {
+    if (!maskHas(mask, pc))
+      continue;
     const int r = noteStrength(cIonian, pc, chord);
-    const int below = ((pc - 1) % 12 + 12) % 12;
-    const bool clashes = !maskHas(chord.tones, pc) && maskHas(chord.tones, below);
-    if (clashes)
+    if (clashesWith(pc, chord))
       bestClash = std::min(bestClash, r);
     else
       worstNonClash = std::max(worstNonClash, r);
   }
   INFO("worst non-clash " << worstNonClash << ", best clash " << bestClash);
   REQUIRE(worstNonClash < bestClash);
+}
+
+// A DELIBERATE INVERSION, pinned so it cannot be "fixed" by accident.
+//
+// A scale tone that clashes outranks a chromatic that does not. Over C major
+// that means F -- diatonic, and the textbook avoid note -- is preferred to Bb,
+// which is out of key but a perfectly good blues colour. A case can be made
+// either way; it is ordered like this because staying in key is the more
+// reliable instinct for a generator that cannot hear itself, and because the
+// gate keeps both of them off the strong beats anyway.
+TEST_CASE("a diatonic clash still outranks a chromatic that does not clash",
+          "[strength][clash]") {
+  const auto chord = cMajor();
+  const int f = noteStrength(cIonian, 5, chord);    // in key, clashes with E
+  const int bFlat = noteStrength(cIonian, 10, chord);  // out of key, no clash
+
+  REQUIRE(tierOf(cIonian, 5, chord) == Tier::ScaleClash);
+  REQUIRE(tierOf(cIonian, 10, chord) == Tier::Chromatic);
+  INFO("F " << f << ", Bb " << bFlat);
+  REQUIRE(f < bFlat);
+
+  // Neither is admissible on an ordinary beat, which is what limits the cost
+  // of getting this call wrong.
+  const int ceiling = rankCeiling(1, true);
+  CHECK(f > ceiling);
+  CHECK(bFlat > ceiling);
+}
+
+TEST_CASE("chromatics that clash are the last resort", "[strength][clash]") {
+  const auto chord = cMajor();
+  // C# is out of key and a semitone above C.
+  REQUIRE(tierOf(cIonian, 1, chord) == Tier::ChromaticClash);
+  for (int pc = 0; pc < 12; ++pc)
+    if (pc != 1)
+      CHECK(noteStrength(cIonian, pc, chord) < noteStrength(cIonian, 1, chord));
 }
 
 // ===========================================================================
@@ -168,11 +218,12 @@ TEST_CASE("an ordinary beat admits anything that does not clash",
   const auto chord = cMajor();
   const int ceiling = rankCeiling(1, true);
   for (int pc = 0; pc < 12; ++pc) {
-    const int below = ((pc - 1) % 12 + 12) % 12;
-    const bool clashes = !maskHas(chord.tones, pc) && maskHas(chord.tones, below);
+    const bool inKey = maskHas(pcMask(cIonian), pc);
+    const bool clashes = clashesWith(pc, chord);
     const bool admitted = noteStrength(cIonian, pc, chord) <= ceiling;
-    INFO("pc " << pc << " clashes " << clashes << " admitted " << admitted);
-    CHECK(admitted == !clashes);
+    INFO("pc " << pc << " inKey " << inKey << " clashes " << clashes
+               << " admitted " << admitted);
+    CHECK(admitted == (inKey && !clashes));
   }
 }
 
@@ -236,7 +287,7 @@ TEST_CASE("a chord with no root is absent, and ranks nothing",
   CHECK_FALSE(none.present());
   CHECK_FALSE(chordOf(-1, {0, 4, 7}).present());
   for (int pc = 0; pc < 12; ++pc)
-    CHECK(noteStrength(cIonian, pc, none) == noteStrengthRank(cIonian, pc));
+    CHECK(noteStrength(cIonian, pc, none) == noteStrength(cIonian, pc));
 }
 
 TEST_CASE("strength stays finite and ordered for every input",
@@ -248,8 +299,76 @@ TEST_CASE("strength stays finite and ordered for every input",
       const int r = noteStrength(k, pc, chord);
       INFO("root " << root << " pc " << pc << " rank " << r);
       REQUIRE(r >= 0);
-      REQUIRE(r <= kMaxFifthsRank + kNonChordTonePenalty + kClashPenalty);
+      REQUIRE(r <= 7 * kTierStride);
       // Wrapping an octave must not change the answer.
       REQUIRE(r == noteStrength(k, pc + 12, chord));
+    }
+}
+
+// ===========================================================================
+// The order, stated as a table over real changes. This is the specification:
+// if the intent changes, this is the test that should be edited first.
+// ===========================================================================
+
+namespace {
+
+std::string orderOver(const KeySig &key, const SoundingChord &chord, int howMany) {
+  static const char *kNames[12] = {"C", "C#", "D",  "D#", "E",  "F",
+                                   "F#", "G",  "G#", "A",  "A#", "B"};
+  std::vector<int> pcs;
+  for (int pc = 0; pc < 12; ++pc)
+    pcs.push_back(pc);
+  std::stable_sort(pcs.begin(), pcs.end(), [&](int a, int b) {
+    return noteStrength(key, a, chord) < noteStrength(key, b, chord);
+  });
+  std::string out;
+  for (int i = 0; i < howMany; ++i) {
+    if (i)
+      out += " ";
+    out += kNames[pcs[static_cast<std::size_t>(i)]];
+  }
+  return out;
+}
+
+}  // namespace
+
+TEST_CASE("the preference order over real changes", "[strength][order]") {
+  // The chord root, then the chord tones by fifths, then the key root, then
+  // the rest of the scale, then the avoid notes, then out of key.
+  CHECK(orderOver(cIonian, cMajor(), 7) == "C G E D A B F");
+  CHECK(orderOver(cIonian, cMaj7(), 7) == "C G E B D A F");
+  CHECK(orderOver(cIonian, dMinor(), 7) == "D A F C G E B");
+
+  // G7: the guide tones F and B are chord tones and rank above every scale
+  // tone, and C -- the key root -- is correctly demoted, because over a
+  // dominant it is the note to avoid.
+  const auto g7 = chordOf(7, {0, 4, 7, 10});
+  CHECK(orderOver(cIonian, g7, 7) == "G D F B A E C");
+}
+
+TEST_CASE("with no chord the order is the plain scale order",
+          "[strength][order]") {
+  CHECK(orderOver(cIonian, SoundingChord{}, 7) == "C G F D A E B");
+}
+
+// The key-root tier is currently order-redundant: fifths distance already
+// gives the key root a within-tier rank of 0, which nothing else can reach.
+// Asserted so that the redundancy is a known fact, and so that a change to the
+// within-tier metric that breaks it shows up here rather than in a listening
+// test six months later.
+TEST_CASE("the key root sorts first among key-centred notes anyway",
+          "[strength][order]") {
+  for (int root = 0; root < 12; ++root)
+    for (int brightness = kLocrian; brightness <= kLydian; ++brightness) {
+      const KeySig k{root, static_cast<int8_t>(brightness), {},
+                     ScaleType::Diatonic};
+      const int rootRank = noteStrengthRank(k, root);
+      REQUIRE(rootRank == 0);
+      for (int pc = 0; pc < 12; ++pc) {
+        if (pc == root)
+          continue;
+        INFO("root " << root << " brightness " << brightness << " pc " << pc);
+        REQUIRE(noteStrengthRank(k, pc) > rootRank);
+      }
     }
 }

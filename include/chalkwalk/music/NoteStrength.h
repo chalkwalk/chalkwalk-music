@@ -72,6 +72,7 @@
 #include <chalkwalk/music/Scale.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 
 namespace chalkwalk::music {
@@ -89,14 +90,7 @@ struct SoundingChord {
   [[nodiscard]] bool present() const noexcept { return root >= 0 && tones != 0; }
 };
 
-// Rank bands. A chord tone always outranks a non-chord tone, and a non-chord
-// tone always outranks a clash, whatever the fifths distance -- so the bands
-// are spaced wider than the widest possible fifths rank (which is 12).
-inline constexpr int kMaxFifthsRank = 12;
-inline constexpr int kNonChordTonePenalty = 16;
-inline constexpr int kClashPenalty = 32;
-
-// Build a chord from a root and its intervals above that root.
+// Build a chord from a root and the intervals above it.
 [[nodiscard]] inline SoundingChord chordOf(int root,
                                            const std::vector<int> &intervals) {
   SoundingChord c;
@@ -108,59 +102,150 @@ inline constexpr int kClashPenalty = 32;
   return c;
 }
 
-// Lower is stronger. Zero is the tonic with nothing sounding against it.
+// ---------------------------------------------------------------------------
+// THE ORDER
+//
+// Seven tiers. The tier decides everything; fifths distance only ever breaks
+// ties WITHIN a tier. That is deliberate rather than a simplification: the
+// point of favouring chord tones is to push a line into playing the changes
+// instead of noodling an in-key pentatonic over the whole form, and a weighted
+// sum lets a conveniently-placed scale tone outbid a chord tone, which is
+// exactly the behaviour being designed out.
+//
+//   0  the chord root
+//   1  the other chord tones          -- fifths from the CHORD root
+//   2  the key root                   -- unless it clashes, see below
+//   3  scale tones that do not clash  -- fifths from the KEY root
+//   4  scale tones that clash
+//   5  chromatics that do not clash
+//   6  chromatics that clash
+//
+// A scale tone that clashes still outranks a chromatic that does not. That is
+// a deliberate choice and a debatable one -- over C major, F is diatonic and
+// the textbook avoid note, while Bb is out of key but a perfectly good blues
+// colour. It is ordered this way because staying in key is the more reliable
+// instinct for a generator that cannot hear itself.
+//
+// CLASH MEANS A SEMITONE ABOVE, not either side. The asymmetry is real: a note
+// a semitone above a chord tone hangs as an unresolved suspension of it, while
+// a semitone below reads as a leading tone into it. Symmetric adjacency would
+// demote the maj7 over a major triad, the 9th over a minor chord and the 13th
+// over a dominant -- three sounds that are entirely standard. Roughness IS
+// symmetric, but roughness is a voicing question and depends on register,
+// which this pitch-class model cannot see at all. See ROADMAP.md.
+//
+// THE KEY-ROOT TIER IS CURRENTLY ORDER-REDUNDANT, and that is worth knowing
+// before someone deletes it as dead weight. Fifths distance from the key root
+// gives the key root itself a within-tier rank of 0, which no other note can
+// reach -- the brightness lean subtracts at most 1 from a distance of at least
+// 2 -- so the key root already sorts first among the key-centred tiers without
+// a tier of its own. It is kept because it states the intent, and because a
+// future within-tier metric that is not fifths-based would need it. There is a
+// test asserting the equivalence, so the redundancy is a known fact rather
+// than an accident.
+//
+// The key root loses its tier when it clashes: over G7 in C major the note C
+// is both the key root and a semitone above the B, and it is the classic note
+// to avoid there. Tier beats provenance.
+//
+// WITHIN CHORD TONES the order is fifths from the chord root, so the root and
+// fifth come before the third and seventh. Those last two are the guide tones
+// that actually define a change, so an ordering that prefers roots would sound
+// like outlining rather than playing changes -- but the gate admits ALL chord
+// tones on a strong beat, so this ordering only decides ties, never what is
+// reachable. If a ceiling is ever tightened to cut inside the chord, revisit.
+
+// One tier is worth more than any distance within a tier.
+inline constexpr int kTierStride = 16;   // > the widest possible fifths rank (12)
+
+enum class Tier : int {
+  ChordRoot      = 0,
+  ChordTone      = 1,
+  KeyRoot        = 2,
+  ScaleTone      = 3,
+  ScaleClash     = 4,
+  Chromatic      = 5,
+  ChromaticClash = 6,
+};
+
+// Is `pc` a semitone ABOVE something the chord is sounding? A chord tone never
+// is: in a major seventh the root sits a semitone above the seventh, and
+// testing this before membership would demote the root of every maj7.
+[[nodiscard]] inline bool clashesWith(int pitchClass,
+                                      const SoundingChord &chord) noexcept {
+  const int pc = ((pitchClass % 12) + 12) % 12;
+  if (!chord.present() || maskHas(chord.tones, pc))
+    return false;
+  return maskHas(chord.tones, ((pc - 1) % 12 + 12) % 12);
+}
+
+[[nodiscard]] inline Tier tierOf(const KeySig &key, int pitchClass,
+                                 const SoundingChord &chord) noexcept {
+  const int pc = ((pitchClass % 12) + 12) % 12;
+
+  if (chord.present()) {
+    if (pc == chord.root)
+      return Tier::ChordRoot;
+    if (maskHas(chord.tones, pc))
+      return Tier::ChordTone;
+  }
+
+  const bool inScale = maskHas(pcMask(key), pc);
+  const bool clash = clashesWith(pc, chord);
+
+  if (clash)
+    return inScale ? Tier::ScaleClash : Tier::ChromaticClash;
+  if (pc == (((key.root % 12) + 12) % 12))
+    return Tier::KeyRoot;
+  return inScale ? Tier::ScaleTone : Tier::Chromatic;
+}
+
+// Lower is stronger. Zero is the root of the sounding chord, or the tonic when
+// nothing is sounding.
 [[nodiscard]] inline int noteStrength(const KeySig &key, int pitchClass,
                                       const SoundingChord &chord = {}) noexcept {
   const int pc = ((pitchClass % 12) + 12) % 12;
+  const Tier tier = tierOf(key, pc, chord);
 
-  // Axis 3: the scale-relative ranking. Always present, and on its own when
-  // there is no chart.
-  int rank = noteStrengthRank(key, pc);
+  // Chord tones are organised around the chord; everything else around the key.
+  // The brightness lean is a property of the SCALE, so it applies only to the
+  // key-centred distances -- leaning a chord-relative distance by the scale's
+  // brightness would be mixing two unrelated facts.
+  const int within = (tier == Tier::ChordRoot || tier == Tier::ChordTone)
+                         ? 2 * std::abs(fifthsOffsetOf(chord.root, pc))
+                         : noteStrengthRank(key, pc);
 
-  if (!chord.present())
-    return rank;
-
-  // Axis 2: membership, tested FIRST so that a chord tone can never be
-  // demoted as a clash.
-  if (maskHas(chord.tones, pc))
-    return rank;
-
-  rank += kNonChordTonePenalty;
-
-  // Axis 4: a semitone above something the chord is sounding.
-  const int below = ((pc - 1) % 12 + 12) % 12;
-  if (maskHas(chord.tones, below))
-    rank += kClashPenalty;
-
-  return rank;
+  return static_cast<int>(tier) * kTierStride + within;
 }
 
 // The worst rank a note may have at this metric strength.
 //
-// Two ladders, because the two contexts ask different questions and each is
-// preserved exactly as its project had it.
-//
-// WITHOUT a chart, strength buys tonal closeness: a downbeat takes the root or
-// its nearest fifths, a quarter reaches out to the pentatonic arc, anything
-// weaker takes any colour note.
+// Two ladders, because the two contexts ask different questions, and each is
+// preserved exactly as the project it came from had it.
 //
 // WITH a chart, strength buys chord agreement: a strong beat takes a chord
-// tone, an ordinary beat any non-clashing note, and only an off-beat may touch
-// a semitone above a chord tone -- and then only in passing, which is the
-// caller's business (cap the duration).
+// tone, an ordinary beat anything in key that does not clash, and only an
+// off-beat may touch a clash or a chromatic -- and then in passing, which is
+// the caller's business (cap the duration).
+//
+// WITHOUT one, strength buys tonal closeness: a downbeat takes the tonic or
+// its nearest fifths, a quarter reaches out to the pentatonic arc, anything
+// weaker takes any colour note. Expressed against the tier scale, this is the
+// identical set of notes the scale-only model admitted, because a caller with
+// no chart only ever sees tiers 2, 3 and 5.
 [[nodiscard]] inline int rankCeiling(int strength, bool hasChart) noexcept {
   if (hasChart) {
     if (strength >= 3)
-      return kNonChordTonePenalty - 1;  // chord tones only
+      return 2 * kTierStride - 1;   // chord tones only
     if (strength >= 1)
-      return kClashPenalty - 1;         // anything that does not clash
-    return 1000;                        // off-beat: colour is allowed
+      return 4 * kTierStride - 1;   // in key, and not clashing
+    return 1000;                    // off-beat: colour is allowed
   }
   if (strength >= 3)
-    return 2;     // downbeat / half-bar -- root and nearest fifths
+    return 3 * kTierStride + 2;     // tonic and its nearest fifths
   if (strength == 2)
-    return 4;     // quarter -- out to the pentatonic arc
-  return 1000;    // eighth / off-beat -- any colour note
+    return 3 * kTierStride + 4;     // out to the pentatonic arc
+  return 1000;
 }
 
 // Search outward from `idx0` for the nearest candidate whose rank the beat
