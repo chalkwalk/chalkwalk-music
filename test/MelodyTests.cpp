@@ -325,3 +325,40 @@ TEST_CASE("the gate still holds with direction switched on") {
         }
   }
 }
+
+TEST_CASE("direction stays a tie-breaker, never a reason to leap") {
+  // The constraint that keeps the two terms from cancelling. At half the
+  // interval weight or below, raising direction must not make the line leap
+  // more -- which is the failure measured on the real generator at 2 and 3.
+  const auto pool = scalePool(cIonian, 4, 6);
+  const std::vector<int> open(pool.size(), 0);
+
+  // An aim sequence that swings hard, so gap-fill and contour can align.
+  std::vector<int> aims;
+  for (int i = 0; i < 60; ++i)
+    aims.push_back(72 + ((i * 37) % 25) - 12);
+
+  auto wideMoves = [&](int direction) {
+    MelodyState state;
+    int wide = 0;
+    for (int aim : aims) {
+      const auto idx =
+          chooseNote(pool, open, 1000, aim, state, MelodyWeights{1, 4, direction});
+      if (state.lastNote >= 0 && std::abs(pool[idx] - state.lastNote) >= 8)
+        ++wide;
+      state.advance(pool[idx]);
+    }
+    return wide;
+  };
+
+  const int base = wideMoves(0);
+  CHECK_MSG(wideMoves(safeDirectionWeight(4)) <= base,
+            "the safe direction weight made the line leap more");
+}
+
+TEST_CASE("the safe direction weight is half the interval weight") {
+  CHECK_MSG(safeDirectionWeight(0) == 0, "no interval term, no direction term");
+  for (int w = 1; w <= 20; ++w)
+    CHECK_MSG(safeDirectionWeight(w) * 2 <= w, "direction outweighs interval at " +
+                                                   std::to_string(w));
+}

@@ -162,6 +162,25 @@ struct MelodyWeights {
   int direction = 0;   // off by default: it is the caller who knows the contour
 };
 
+// DIRECTION MUST NOT BE ABLE TO OUTBID INTERVAL. Keep it at or below half the
+// interval weight.
+//
+// Gap-fill makes reversing after a leap free, so a large downward reversal is
+// competing on contour distance alone -- and when the contour happens to want
+// to go that way too, the two agree and the interval cost loses. Measured on a
+// real generator at interval weight 2: at direction 1 the wide leaps stay at 6
+// per 1939 moves, at 2 they jump to 41, and at 3 to 85 with the largest
+// interval growing from an octave to a minor fourteenth. That is the exact
+// fault the interval term exists to prevent, reintroduced by its own
+// tie-breaker.
+//
+// A caller exposing this as a control should therefore DERIVE the direction
+// weight from the interval weight rather than offering it separately, or the
+// two dials have a region where they cancel.
+[[nodiscard]] inline int safeDirectionWeight(int intervalWeight) noexcept {
+  return intervalWeight > 0 ? intervalWeight / 2 : 0;
+}
+
 // The admissible candidate that best serves the contour and the previous note.
 //
 // `candidates` are MIDI notes in ascending order and `ranks` their strengths,
