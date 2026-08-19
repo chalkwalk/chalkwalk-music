@@ -14,7 +14,8 @@ add_executable(chalkwalk_music_tests
     MetricGridTests.cpp
     AccentTests.cpp
     DensityTests.cpp
-    MetricSelectTests.cpp)
+    MetricSelectTests.cpp
+    TuningTests.cpp)
 
 target_link_libraries(chalkwalk_music_tests
     PRIVATE chalkwalk::music Catch2::Catch2WithMain)

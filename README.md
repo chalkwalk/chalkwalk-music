@@ -21,9 +21,25 @@ does seventh-chord voice leading), or a whole scoring environment (`CFugue`).
 | `AccentVel.h` | Metric weight to velocity, as a curve with a centre and a depth |
 | `Density.h` | Subtractive thinning: an overlay that can only silence events, never add them |
 | `MetricSelect.h` | Choosing *which* events survive a density cut -- strongest metric positions first, Euclidean-spread within a tier when the budget runs out mid-tier |
+| `Tuning.h` | Scala `.scl` scales and `.kbm` keyboard mappings, as per-note deviations from 12-TET |
 
-Planned: note strength against a *chord* as well as a scale, and a Scala
-`.scl`/`.kbm` tuning parser.
+Planned: note strength against a *chord* as well as a scale.
+
+### The tuning parser takes text, not a filename
+
+Deliberately. A parser that opens files cannot be tested without a filesystem,
+cannot read a scale out of a zip, a resource bundle, an HTTP response or a
+string literal, and drags a file API into a library that otherwise needs
+nothing. Reading the bytes is the caller's job and it is one line.
+
+Two quirks of the format it gets right, and which are easy to get wrong:
+
+- **The last entry of a `.scl` file is the period, not a note.** Usually 2/1,
+  but Bohlen-Pierce repeats at 3/1 and stretched piano tunings repeat slightly
+  wide. Hardcoding 1200 cents is wrong outside the first period.
+- **Keys below the mapping's middle note need floor division**, not C++'s
+  truncation, or everything in the period below middle C lands in the wrong
+  one.
 
 ### The scale model in one paragraph
 
