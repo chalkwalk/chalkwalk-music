@@ -83,28 +83,29 @@ namespace chalkwalk::music {
 // Stepwise motion is free because it is the default state of a melody, not
 // because it is cheap. Everything else is priced against it.
 //
-// THE UNISON IS NOT THE CHEAPEST MOVE, and that is the second place this table
-// deliberately stops being monotone. Repeating a note is not melodic motion at
-// all, and if standing still is free then every other term in the objective is
-// an argument for standing still: measured with the unison at 0, turning the
-// direction weight up took repeated notes from 20% of all moves to 54%, which
-// is a drone rather than a melody. Pricing it is what makes the direction term
-// usable at all.
+// THE UNISON IS NOT IN THIS TABLE, and that is the second thing it gets right.
 //
-// The price is 2 -- the same as a perfect fourth or fifth -- and it was raised
-// there from 1 by measurement on a real generator. At 1 the unison ties with a
-// third, which is fine in a chromatic-dense pool and wrong in a sparse one: in
-// a triad pool the STEP is a third, so a flat contour tie-breaks to standing
-// still and repeats climbed back to 25% as the smoothing weight rose. At 3 the
-// line stops repeating notes almost entirely (0.7%), which is its own kind of
-// unnatural. At 2 it sits near 10%.
+// Repeating a note is not an interval. It was priced here at first -- a fixed
+// surcharge, on the reasoning that standing still is not motion -- and the
+// reasoning is sound while the location is wrong, because whether a repeat is
+// dull depends entirely on what is happening underneath it.
 //
-// Read as a rule rather than a number: standing still costs about what a
-// perfect leap costs, because you should have a reason for either.
+// A repeated note over a chord that CHANGED is a common tone: the same pitch
+// re-heard as a new colour, which is a device rather than a failure to move. A
+// repeated note under a static chord is standing still. A table indexed by
+// semitones cannot tell those apart, so it taxed both -- and measured on a real
+// generator that showed up as one key keeping 5.2% repeats and sounding right
+// while another kept 1.8% and sounded like it was avoiding the unison. The
+// chord-change rate was identical in both; what differed was how many of the
+// surviving repeats were common tones (93% in the key that sounded wrong).
+//
+// So the cost moved to `MelodyWeights::repeat`, which the caller sets per step
+// and can waive when the harmony moves.
+
 [[nodiscard]] inline int intervalCost(int semitones) noexcept {
   const int d = std::abs(semitones);
   if (d == 0)
-    return 2;   // NOT motion. See below.
+    return 0;   // not an interval at all -- see MelodyWeights::repeat
   if (d <= 2)
     return 0;   // stepwise: what a melody does unless it has a reason
   if (d <= 4)
@@ -171,6 +172,16 @@ struct MelodyWeights {
   int contour = 1;
   int interval = 1;
   int direction = 0;   // off by default: it is the caller who knows the contour
+
+  // What it costs to play the same note again. NOT scaled by `interval`: this
+  // is a judgement about repetition, not about distance, and the caller is
+  // expected to vary it per step -- waived or reduced where the harmony has
+  // moved underneath, so a common tone is free and standing still is not.
+  //
+  // Left at 0 this is the old behaviour, where a repeat was the cheapest thing
+  // a line could do. That is a drone: with a direction weight in play it
+  // measured 54% of all moves.
+  int repeat = 0;
 };
 
 // DIRECTION MUST NOT BE ABLE TO OUTBID INTERVAL. Keep it at or below half the
@@ -224,6 +235,8 @@ struct MelodyWeights {
       const int move = candidates[i] - state.lastNote;
       score += w.interval * intervalCost(move);
       score += w.direction * directionCost(move, state.lastMove);
+      if (move == 0)
+        score += w.repeat;
     }
     return score;
   };

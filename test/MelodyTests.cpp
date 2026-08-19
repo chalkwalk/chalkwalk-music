@@ -54,20 +54,55 @@ TEST_CASE("stepwise motion is free") {
     CHECK_MSG(intervalCost(d) == 0, "step of " + std::to_string(d) + " is not free");
 }
 
-TEST_CASE("standing still is not the cheapest move") {
-  // The unison is not motion. If it is free then every other term in the
-  // objective becomes an argument for repeating the note, and the melody
-  // stops being one -- measured at 54% repeated notes with a direction weight
-  // of 2, against 20% once the unison is priced.
-  CHECK_MSG(intervalCost(0) > intervalCost(1), "a repeat must cost more than a step");
-  CHECK_MSG(intervalCost(0) > intervalCost(2), "and more than a whole tone");
-  // And more than a THIRD, which is the part measurement forced. In a sparse
-  // pool the step IS a third, so a unison tied with a third lets a flat
-  // contour tie-break to standing still: repeats climbed back to 25% as the
-  // smoothing weight rose. Level with a perfect leap instead -- you should
-  // have a reason for either.
-  CHECK_MSG(intervalCost(0) > intervalCost(4), "and more than a third");
-  CHECK_MSG(intervalCost(0) <= intervalCost(7), "but no more than a fifth");
+TEST_CASE("the unison is not priced as an interval") {
+  // Repetition is not a distance, so it is not in this table. Pricing it here
+  // taxed the common tone -- a repeat under a chord that CHANGED -- at the same
+  // rate as standing still under a static one, which is a different musical
+  // event with the same interval. It lives in MelodyWeights::repeat, which the
+  // caller varies per step.
+  CHECK_MSG(intervalCost(0) == 0, "the unison must not be priced here");
+}
+
+TEST_CASE("the repeat weight is what stops a drone") {
+  const std::vector<int> pool{60, 62, 64};
+  const std::vector<int> open(pool.size(), 0);
+
+  // Aim exactly at the note the line just played, so nothing but the repeat
+  // weight can push it off.
+  const MelodyState onIt{62, 0};
+  CHECK_MSG(chooseNote(pool, open, 1000, 62, onIt, MelodyWeights{1, 2, 0, 0}) == 1,
+            "with no repeat weight the line should stand still");
+  CHECK_MSG(chooseNote(pool, open, 1000, 62, onIt, MelodyWeights{1, 2, 0, 8}) != 1,
+            "a repeat weight should move it off");
+}
+
+TEST_CASE("smoothing never makes a repeat less attractive") {
+  // The repeat cost is NOT multiplied by the interval weight, so raising the
+  // smoothing can only make the ALTERNATIVES dearer. A repeat that survives at
+  // low smoothing must therefore still survive at high smoothing.
+  //
+  // The converse is deliberately not asserted: a repeat that lost at low
+  // smoothing may win at high smoothing, which is a smoother line repeating
+  // more often, and is what asking for a smoother line means.
+  const auto pool = scalePool(cIonian, 4, 6);
+  const std::vector<int> open(pool.size(), 0);
+
+  for (int repeat = 0; repeat <= 8; ++repeat)
+    for (std::size_t at = 1; at + 1 < pool.size(); ++at)
+      for (int aim = pool[at] - 3; aim <= pool[at] + 3; ++aim) {
+        const MelodyState onIt{pool[at], 0};
+        const bool heldAtOne =
+            chooseNote(pool, open, 1000, aim, onIt,
+                       MelodyWeights{1, 1, 0, repeat}) == at;
+        if (!heldAtOne)
+          continue;
+        for (int iw = 2; iw <= 6; ++iw)
+          CHECK_MSG(chooseNote(pool, open, 1000, aim, onIt,
+                               MelodyWeights{1, iw, 0, repeat}) == at,
+                    "smoothing " + std::to_string(iw) + " broke a repeat that " +
+                        "survived at 1 (repeat weight " + std::to_string(repeat) +
+                        ", aim " + std::to_string(aim) + ")");
+      }
 }
 
 TEST_CASE("the cost is deliberately not monotone in size") {
