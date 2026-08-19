@@ -118,6 +118,13 @@ argument for this library in one sentence: the same small pieces of music
 theory get retyped, and the copies drift in ways that are invisible until they
 are put side by side.
 
+## Roadmap
+
+[](ROADMAP.md). The headline gap: dissonance is
+register-dependent and this model is register-blind -- it ranks pitch classes,
+so / and / look identical to it, and they do not sound
+identical.
+
 ## Licence
 
 MIT. The plugins this was extracted from are GPLv3, because JUCE's free licence
