@@ -16,11 +16,26 @@ does seventh-chord voice leading), or a whole scoring environment (`CFugue`).
 | | |
 |---|---|
 | `Euclidean.h` | Euclidean rhythms: patterns, an allocation-free membership test, pattern period, coprime pulse selection, and Euclidean accent placement |
+| `Scale.h` | The tonal core: keys as a fifths window, modes as a signed brightness axis, per-degree modifiers, pitch-class masks, note strength, quantising and naming |
 
-Planned, in the order they are moving: the scale model (keys as pitch-class
-masks with a signed brightness axis and per-degree modifiers), note strength
-against a scale *and* a chord, metric grids and accents, and a Scala
-`.scl`/`.kbm` tuning parser.
+Planned, in the order they are moving: metric grids and accents, note strength
+against a *chord* as well as a scale, and a Scala `.scl`/`.kbm` tuning parser.
+
+### The scale model in one paragraph
+
+A key is a contiguous **window of fifths** with the root at offset 0.
+`brightness` is the window's position, which *is* the mode -- Lydian brightest
+through Locrian darkest, one accidental per step, so the circle of fifths falls
+out of the representation instead of being a table. Window *size* gives the
+pentatonic and triad cores for free. **Modifiers** then alter individual
+degrees (harmonic minor, the blue note, Neapolitan), each anchored to the
+window's flat edge so it means the same thing in every relative mode. Everything
+collapses to a twelve-bit pitch-class mask.
+
+A tonic plus one of seven named modes -- the usual representation -- is a strict
+special case. The cost of the general one, stated plainly: a mask has
+`popcount(mask)` degrees, not always seven, so code that assumes seven has to
+become "the nth set bit".
 
 ## Using it
 

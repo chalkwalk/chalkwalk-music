@@ -8,7 +8,9 @@ if(NOT TARGET Catch2::Catch2WithMain)
     FetchContent_MakeAvailable(Catch2)
 endif()
 
-add_executable(chalkwalk_music_tests EuclideanTests.cpp)
+add_executable(chalkwalk_music_tests
+    EuclideanTests.cpp
+    ScaleTests.cpp)
 
 target_link_libraries(chalkwalk_music_tests
     PRIVATE chalkwalk::music Catch2::Catch2WithMain)
