@@ -22,8 +22,7 @@ does seventh-chord voice leading), or a whole scoring environment (`CFugue`).
 | `Density.h` | Subtractive thinning: an overlay that can only silence events, never add them |
 | `MetricSelect.h` | Choosing *which* events survive a density cut -- strongest metric positions first, Euclidean-spread within a tier when the budget runs out mid-tier |
 | `Tuning.h` | Scala `.scl` scales and `.kbm` keyboard mappings, as per-note deviations from 12-TET |
-
-Planned: note strength against a *chord* as well as a scale.
+| `NoteStrength.h` | How good a note is here and now: against the scale, and against the chord sounding under it |
 
 ### The tuning parser takes text, not a filename
 
