@@ -37,6 +37,31 @@
 // way off, with no term objecting to the size of the jump it just made.
 //
 // ---------------------------------------------------------------------------
+// DIRECTION IS A SECOND KIND OF MEMORY
+//
+// Knowing how far the last note was is not the same as knowing which way it
+// went. Two rules exist about that and they look contradictory:
+//
+//   A RUN READS AS INTENTIONAL. Having moved up by step, moving up again says
+//   the line meant it; turning round says it was wandering.
+//
+//   A LEAP WANTS FILLING IN. Having jumped a fifth, coming back down is what
+//   the ear expects -- this is the counterpoint gap-fill rule, and it is why
+//   an octave leap followed by a further octave leap sounds like a mistake.
+//
+// They are not in conflict, they apply at different SIZES, so one term
+// captures both with the regime chosen by how big the previous move was. See
+// `directionCost`.
+//
+// Direction and the phrase contour are the same kind of statement at different
+// time scales -- the contour says where the line should be by the end, this
+// says what it should do next -- so they conflict only at a contour's turning
+// point. The caller decides how loudly to state it, and the weight that makes
+// sense depends on the contour it is competing with: a rising contour already
+// dictates direction and needs almost none, where a random walk has no shape
+// of its own and this is the entire difference between wandering and phrasing.
+//
+// ---------------------------------------------------------------------------
 // WHY THE COST IS NOT MONOTONE IN SIZE
 //
 // A tenth is not "worse than" an octave because it is bigger. Melodic leaps are
@@ -76,7 +101,45 @@ namespace chalkwalk::music {
   return 10 + (d - 12);
 }
 
-// How the two halves of the objective trade off.
+// What it costs to move this way, having last moved that way.
+//
+// Non-negative throughout, deliberately: expressing gap-fill as a BONUS for
+// reversing works out to the same ordering and makes the objective's scale
+// depend on the history, which is harder to reason about and harder to weight.
+//
+//                       after a step (<=4)   after a leap (>=5)
+//     continuing                 0                   3
+//     reversing                  2                   0
+//
+// A fourth counts as a leap here. Gap-fill is usually stated for a fourth and
+// wider, and the tritone -- the other interval in that band -- wants resolving
+// in one direction anyway.
+[[nodiscard]] inline int directionCost(int move, int lastMove) noexcept {
+  if (move == 0 || lastMove == 0)
+    return 0;
+  const bool continuing = (move > 0) == (lastMove > 0);
+  if (std::abs(lastMove) <= 4)
+    return continuing ? 0 : 2;
+  return continuing ? 3 : 0;
+}
+
+// What the line remembers. `lastMove` is signed and holds the last NON-ZERO
+// move, so a repeated note does not erase which way the line was going.
+struct MelodyState {
+  int lastNote = -1;   // negative at the start of a line
+  int lastMove = 0;    // 0 until the line has actually moved
+
+  // Fold a chosen note in. Kept here rather than at each call site because
+  // "only update lastMove when the note actually moved" is the kind of rule
+  // that gets written correctly once and wrongly thereafter.
+  void advance(int note) noexcept {
+    if (lastNote >= 0 && note != lastNote)
+      lastMove = note - lastNote;
+    lastNote = note;
+  }
+};
+
+// How the halves of the objective trade off.
 //
 // `contour` is the cost of one semitone away from where the phrase shape wants
 // to be, and is the unit everything else is quoted in. Raising `interval`
@@ -86,15 +149,16 @@ namespace chalkwalk::music {
 struct MelodyWeights {
   int contour = 1;
   int interval = 1;
+  int direction = 0;   // off by default: it is the caller who knows the contour
 };
 
 // The admissible candidate that best serves the contour and the previous note.
 //
 // `candidates` are MIDI notes in ascending order and `ranks` their strengths,
 // one per candidate; `ceiling` is `rankCeiling(metricStrength, hasChart)`.
-// `aim` is where the phrase shape wants the line, and `lastNote` is the
-// previous sounding note, or negative at the start of a line -- in which case
-// the interval term contributes nothing and this is pure contour following.
+// `aim` is where the phrase shape wants the line, and `state` is what the line
+// remembers. At the start of a line -- `lastNote` negative -- the interval and
+// direction terms contribute nothing and this is pure contour following.
 //
 // Ties resolve to the lower index, and since callers pass sorted candidates
 // that means the lower pitch. Defined rather than incidental, because a
@@ -107,7 +171,8 @@ struct MelodyWeights {
 // still sounds nearly right.
 [[nodiscard]] inline std::size_t chooseNote(const std::vector<int> &candidates,
                                             const std::vector<int> &ranks,
-                                            int ceiling, int aim, int lastNote,
+                                            int ceiling, int aim,
+                                            const MelodyState &state,
                                             const MelodyWeights &w = {}) noexcept {
   const std::size_t n = candidates.size();
   if (n == 0)
@@ -115,8 +180,11 @@ struct MelodyWeights {
 
   auto scoreOf = [&](std::size_t i) {
     int score = w.contour * std::abs(candidates[i] - aim);
-    if (lastNote >= 0)
-      score += w.interval * intervalCost(candidates[i] - lastNote);
+    if (state.lastNote >= 0) {
+      const int move = candidates[i] - state.lastNote;
+      score += w.interval * intervalCost(move);
+      score += w.direction * directionCost(move, state.lastMove);
+    }
     return score;
   };
 
