@@ -3,7 +3,7 @@
 // The tonal core. Ported from Lockstep's suite with the assertions unchanged --
 // this file is the acceptance test for that extraction.
 
-#include <catch2/catch_test_macros.hpp>
+#include "LegacyCheck.h"
 
 #include <chalkwalk/music/Scale.h>
 
@@ -11,18 +11,6 @@
 #include <set>
 #include <string>
 
-// Lockstep's test harness took a message as CHECK's second argument. Rather
-// than rewrite 108 assertions -- and risk changing what they assert while
-// moving the code they cover -- the message becomes a Catch2 INFO. This file
-// is the acceptance test for the extraction; rewriting it would defeat that.
-// The condition is parenthesised because Catch2 refuses to decompose `&&` or
-// a chained comparison, and several of these assertions use both. That costs
-// the decomposed failure output, which the message more than replaces.
-#define CHECK_MSG(cond, msg)                                                   \
-    do {                                                                       \
-        INFO(msg);                                                             \
-        CHECK((cond));                                                         \
-    } while (false)
 
 namespace {
 

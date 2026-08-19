@@ -17,9 +17,13 @@ does seventh-chord voice leading), or a whole scoring environment (`CFugue`).
 |---|---|
 | `Euclidean.h` | Euclidean rhythms: patterns, an allocation-free membership test, pattern period, coprime pulse selection, and Euclidean accent placement |
 | `Scale.h` | The tonal core: keys as a fifths window, modes as a signed brightness axis, per-degree modifiers, pitch-class masks, note strength, quantising and naming |
+| `MetricGrid.h` | Metric weight from a time signature, by Lerdahl-Jackendoff hierarchy: a position's weight is the number of levels at which it heads a group. 6/8 is correctly two dotted beats rather than three |
+| `AccentVel.h` | Metric weight to velocity, as a curve with a centre and a depth |
+| `Density.h` | Subtractive thinning: an overlay that can only silence events, never add them |
+| `MetricSelect.h` | Choosing *which* events survive a density cut -- strongest metric positions first, Euclidean-spread within a tier when the budget runs out mid-tier |
 
-Planned, in the order they are moving: metric grids and accents, note strength
-against a *chord* as well as a scale, and a Scala `.scl`/`.kbm` tuning parser.
+Planned: note strength against a *chord* as well as a scale, and a Scala
+`.scl`/`.kbm` tuning parser.
 
 ### The scale model in one paragraph
 
