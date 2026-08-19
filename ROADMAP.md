@@ -107,7 +107,18 @@ mistake in one octave and fine in another.
       live with whoever owns the chart, because they are entangled with
       diatonic spelling. If a second project grows a chord model, compare the
       two before moving anything.
-- [ ] **Scales beyond twelve.** `Scale.h` is twelve-tone; `Tuning.h` handles
+- [ ] **Scales beyond twelve.** *This is the one blocking a planned consumer.*
+      Arps's `ScaleLibrary` cannot move here until it exists: its `Scale` is
+      `{name, tuningName, vector<bool> stepMask}`, a variable-size mask bound to
+      a tuning, so a 41-tone scale is an ordinary case. `KeySig` is a twelve-bit
+      mask with a circle-of-fifths window, and that window is not decoration --
+      it is where brightness, the mode names and the fifths-distance ranking all
+      come from, so `NoteStrength` and `Melody` are built on it. The two are
+      different objects and one does not widen into the other. Whoever takes
+      this on should decide first whether the answer is a second type or a
+      generalised one, because "add a `stepsPerOctave` field" is the shape that
+      looks obvious and quietly breaks every ranking in the library.
+      `Scale.h` is twelve-tone; `Tuning.h` handles
       arbitrary equal and unequal divisions. They do not yet meet: there is no
       way to express "the third degree of a 19-tone scale" through the scale
       model. Worth doing when something needs it.
