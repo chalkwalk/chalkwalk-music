@@ -120,10 +120,9 @@ are put side by side.
 
 ## Roadmap
 
-[](ROADMAP.md). The headline gap: dissonance is
-register-dependent and this model is register-blind -- it ranks pitch classes,
-so / and / look identical to it, and they do not sound
-identical.
+[`ROADMAP.md`](ROADMAP.md). The headline gap: dissonance is register-dependent
+and this model is register-blind -- it ranks pitch classes, so `B4`/`C5` and
+`B6`/`C7` look identical to it, and they do not sound identical.
 
 ## Licence
 
