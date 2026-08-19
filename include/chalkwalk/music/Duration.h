@@ -95,4 +95,51 @@ inline constexpr int kHoldUncapped = 16 * kTicksPerBeat;
   return scaled < 1 ? 1 : static_cast<int>(scaled);
 }
 
+// LEGATO AND STACCATO, which is a different question from how long the note is.
+//
+// `holdTicks` answers "how much room does this note deserve", and the answer is
+// a musical duration -- a downbeat gets a beat, an off-beat a sixteenth. That
+// is the SHAPE of the phrasing and it should not change when a player decides
+// to play the same line more smoothly.
+//
+// Articulation is that second decision, and it is expressed against the gap
+// rather than against the ladder, because that is what the two extremes mean:
+//
+//   0    as short as the note can be and still be heard
+//   50   the ladder as written -- what the metre and the harmony asked for
+//   100  fill the space entirely, so one note runs into the next
+//
+// Below the midpoint this scales the ladder down and keeps its shape: a
+// downbeat is still longer than an off-beat, everything is just clipped. Above
+// it, the ladder is blended toward the gap, and the shape necessarily flattens
+// -- because perfect legato has no shape, every note simply meets the next one.
+// That asymmetry is the honest one: staccato is a way of playing a phrase,
+// legato at the limit is the absence of phrasing.
+//
+// Works in whatever the caller counts. Both arguments must be in the same unit,
+// and the gap stays in the caller's units for the reason given at the top.
+inline constexpr int kArticulationShortest = 0;
+inline constexpr int kArticulationNatural = 50;
+inline constexpr int kArticulationLegato = 100;
+
+[[nodiscard]] inline constexpr int articulate(int hold, int gap,
+                                              int articulation) noexcept {
+  if (gap <= 0)
+    return 0;
+  const int a = articulation < 0 ? 0 : (articulation > 100 ? 100 : articulation);
+  const int natural = hold < gap ? hold : gap;
+
+  long long out = a <= kArticulationNatural
+                      ? static_cast<long long>(natural) * a / kArticulationNatural
+                      : natural + static_cast<long long>(gap - natural) *
+                                      (a - kArticulationNatural) /
+                                      kArticulationNatural;
+
+  if (out < 1)
+    out = 1;              // a note worth playing is worth being audible
+  if (out > gap)
+    out = gap;
+  return static_cast<int>(out);
+}
+
 }  // namespace chalkwalk::music

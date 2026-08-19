@@ -117,3 +117,83 @@ TEST_CASE("degenerate units are survivable") {
   CHECK_MSG(holdIn(holdForStrength(3), 0) == 0, "zero units per beat");
   CHECK_MSG(holdIn(holdForStrength(3), -4) == 0, "negative units per beat");
 }
+
+// ===========================================================================
+// Articulation: a different question from how long the note is.
+// ===========================================================================
+
+TEST_CASE("the midpoint is exactly the ladder, clamped by the gap") {
+  // The constraint that makes this safe to add: a caller that does not set it
+  // gets precisely what it got before articulation existed.
+  for (int hold = 1; hold <= 400; hold += 7)
+    for (int gap = 1; gap <= 400; gap += 11) {
+      const int natural = hold < gap ? hold : gap;
+      CHECK_MSG(articulate(hold, gap, kArticulationNatural) == natural,
+                "hold " + std::to_string(hold) + " gap " + std::to_string(gap) +
+                    " moved at the natural setting");
+    }
+}
+
+TEST_CASE("full legato fills the gap exactly") {
+  for (int hold = 1; hold <= 400; hold += 7)
+    for (int gap = 1; gap <= 400; gap += 11)
+      CHECK_MSG(articulate(hold, gap, kArticulationLegato) == gap,
+                "legato left a hole at hold " + std::to_string(hold) +
+                    " gap " + std::to_string(gap));
+}
+
+TEST_CASE("nothing ever overruns the next onset") {
+  for (int a = -50; a <= 150; ++a)
+    for (int hold = 1; hold <= 300; hold += 13)
+      for (int gap = 1; gap <= 300; gap += 17)
+        CHECK_MSG(articulate(hold, gap, a) <= gap,
+                  "overran the gap at articulation " + std::to_string(a));
+}
+
+TEST_CASE("a note is never silenced, however short the setting") {
+  for (int a = 0; a <= 100; ++a)
+    for (int gap = 1; gap <= 200; gap += 7)
+      CHECK_MSG(articulate(200, gap, a) >= 1,
+                "a note vanished at articulation " + std::to_string(a));
+}
+
+TEST_CASE("the dial is monotonic") {
+  for (int hold = 1; hold <= 200; hold += 9)
+    for (int gap = 1; gap <= 200; gap += 13) {
+      int previous = 0;
+      for (int a = 0; a <= 100; ++a) {
+        const int got = articulate(hold, gap, a);
+        CHECK_MSG(got >= previous, "turning the dial up shortened the note at " +
+                                       std::to_string(a));
+        previous = got;
+      }
+    }
+}
+
+TEST_CASE("staccato keeps the phrasing shape, legato flattens it") {
+  // The asymmetry that is the whole design. Below the midpoint a downbeat is
+  // still longer than an off-beat; at the top they are equal, because perfect
+  // legato has no shape -- every note simply meets the next one.
+  const int gap = 400;
+  const int strong = holdIn(holdForStrength(3), 96);
+  const int weak = holdIn(holdForStrength(0), 96);
+  CHECK_MSG(strong > weak, "the ladder itself must have shape to preserve");
+
+  for (int a = 10; a <= kArticulationNatural; a += 10)
+    CHECK_MSG(articulate(strong, gap, a) > articulate(weak, gap, a),
+              "staccato flattened the phrasing at " + std::to_string(a));
+
+  CHECK_MSG(articulate(strong, gap, kArticulationLegato) ==
+                articulate(weak, gap, kArticulationLegato),
+            "full legato should leave no difference between the two");
+}
+
+TEST_CASE("clamped rather than surprising, outside the range") {
+  CHECK_MSG(articulate(50, 400, -20) == articulate(50, 400, 0), "below zero");
+  CHECK_MSG(articulate(50, 400, 900) == articulate(50, 400, 100), "above 100");
+}
+
+TEST_CASE("a zero or negative gap yields nothing to play") {
+  CHECK_MSG(articulate(50, 0, 50) == 0, "no room at all");
+  CHECK_MSG(articulate(50, -3, 50) == 0, "a negative gap");
+}
