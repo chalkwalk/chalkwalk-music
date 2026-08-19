@@ -177,7 +177,7 @@ struct MelodyWeights {
 // A caller exposing this as a control should therefore DERIVE the direction
 // weight from the interval weight rather than offering it separately, or the
 // two dials have a region where they cancel.
-[[nodiscard]] inline int safeDirectionWeight(int intervalWeight) noexcept {
+[[nodiscard]] inline constexpr int safeDirectionWeight(int intervalWeight) noexcept {
   return intervalWeight > 0 ? intervalWeight / 2 : 0;
 }
 
