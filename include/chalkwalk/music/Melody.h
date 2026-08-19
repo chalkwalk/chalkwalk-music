@@ -88,12 +88,23 @@ namespace chalkwalk::music {
 // all, and if standing still is free then every other term in the objective is
 // an argument for standing still: measured with the unison at 0, turning the
 // direction weight up took repeated notes from 20% of all moves to 54%, which
-// is a drone rather than a melody. Pricing it level with a third is what makes
-// the direction term usable.
+// is a drone rather than a melody. Pricing it is what makes the direction term
+// usable at all.
+//
+// The price is 2 -- the same as a perfect fourth or fifth -- and it was raised
+// there from 1 by measurement on a real generator. At 1 the unison ties with a
+// third, which is fine in a chromatic-dense pool and wrong in a sparse one: in
+// a triad pool the STEP is a third, so a flat contour tie-breaks to standing
+// still and repeats climbed back to 25% as the smoothing weight rose. At 3 the
+// line stops repeating notes almost entirely (0.7%), which is its own kind of
+// unnatural. At 2 it sits near 10%.
+//
+// Read as a rule rather than a number: standing still costs about what a
+// perfect leap costs, because you should have a reason for either.
 [[nodiscard]] inline int intervalCost(int semitones) noexcept {
   const int d = std::abs(semitones);
   if (d == 0)
-    return 1;   // NOT motion. See below.
+    return 2;   // NOT motion. See below.
   if (d <= 2)
     return 0;   // stepwise: what a melody does unless it has a reason
   if (d <= 4)

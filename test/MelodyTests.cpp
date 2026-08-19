@@ -61,7 +61,13 @@ TEST_CASE("standing still is not the cheapest move") {
   // of 2, against 20% once the unison is priced.
   CHECK_MSG(intervalCost(0) > intervalCost(1), "a repeat must cost more than a step");
   CHECK_MSG(intervalCost(0) > intervalCost(2), "and more than a whole tone");
-  CHECK_MSG(intervalCost(0) <= intervalCost(4), "but no more than a third");
+  // And more than a THIRD, which is the part measurement forced. In a sparse
+  // pool the step IS a third, so a unison tied with a third lets a flat
+  // contour tie-break to standing still: repeats climbed back to 25% as the
+  // smoothing weight rose. Level with a perfect leap instead -- you should
+  // have a reason for either.
+  CHECK_MSG(intervalCost(0) > intervalCost(4), "and more than a third");
+  CHECK_MSG(intervalCost(0) <= intervalCost(7), "but no more than a fifth");
 }
 
 TEST_CASE("the cost is deliberately not monotone in size") {
