@@ -73,7 +73,8 @@ TEST_CASE("returns name from description line", "[tuning]") {
       "100.0\n";
 
   std::string name;
-  parseScl(scl, name);
+  // The scale itself is checked elsewhere; this case is about the name line.
+  (void)parseScl(scl, name);
   CHECK(name == "My Favourite Scale");
 }
 

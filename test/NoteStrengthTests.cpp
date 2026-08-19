@@ -32,7 +32,7 @@ TEST_CASE("with no chord, the order over scale tones is unchanged",
           "[strength][contract]") {
   for (int root = 0; root < 12; ++root)
     for (int brightness = kLocrian; brightness <= kLydian; ++brightness) {
-      const KeySig k{root, static_cast<int8_t>(brightness), {},
+      const KeySig k{static_cast<uint8_t>(root), static_cast<int8_t>(brightness), {},
                      ScaleType::Diatonic};
       const uint16_t mask = pcMask(k);
       for (int a = 0; a < 12; ++a)
@@ -295,7 +295,7 @@ TEST_CASE("strength stays finite and ordered for every input",
   const auto chord = cMaj7();
   for (int root = 0; root < 12; ++root)
     for (int pc = -24; pc <= 36; ++pc) {
-      const KeySig k{root, kDorian, {}, ScaleType::Diatonic};
+      const KeySig k{static_cast<uint8_t>(root), kDorian, {}, ScaleType::Diatonic};
       const int r = noteStrength(k, pc, chord);
       INFO("root " << root << " pc " << pc << " rank " << r);
       REQUIRE(r >= 0);
@@ -360,7 +360,7 @@ TEST_CASE("the key root sorts first among key-centred notes anyway",
           "[strength][order]") {
   for (int root = 0; root < 12; ++root)
     for (int brightness = kLocrian; brightness <= kLydian; ++brightness) {
-      const KeySig k{root, static_cast<int8_t>(brightness), {},
+      const KeySig k{static_cast<uint8_t>(root), static_cast<int8_t>(brightness), {},
                      ScaleType::Diatonic};
       const int rootRank = noteStrengthRank(k, root);
       REQUIRE(rootRank == 0);
