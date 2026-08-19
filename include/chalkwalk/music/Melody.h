@@ -82,8 +82,18 @@ namespace chalkwalk::music {
 //
 // Stepwise motion is free because it is the default state of a melody, not
 // because it is cheap. Everything else is priced against it.
+//
+// THE UNISON IS NOT THE CHEAPEST MOVE, and that is the second place this table
+// deliberately stops being monotone. Repeating a note is not melodic motion at
+// all, and if standing still is free then every other term in the objective is
+// an argument for standing still: measured with the unison at 0, turning the
+// direction weight up took repeated notes from 20% of all moves to 54%, which
+// is a drone rather than a melody. Pricing it level with a third is what makes
+// the direction term usable.
 [[nodiscard]] inline int intervalCost(int semitones) noexcept {
   const int d = std::abs(semitones);
+  if (d == 0)
+    return 1;   // NOT motion. See below.
   if (d <= 2)
     return 0;   // stepwise: what a melody does unless it has a reason
   if (d <= 4)

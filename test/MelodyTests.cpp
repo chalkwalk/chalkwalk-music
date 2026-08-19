@@ -50,8 +50,18 @@ TEST_CASE("interval cost is symmetric in direction") {
 }
 
 TEST_CASE("stepwise motion is free") {
-  for (int d = -2; d <= 2; ++d)
+  for (int d : {-2, -1, 1, 2})
     CHECK_MSG(intervalCost(d) == 0, "step of " + std::to_string(d) + " is not free");
+}
+
+TEST_CASE("standing still is not the cheapest move") {
+  // The unison is not motion. If it is free then every other term in the
+  // objective becomes an argument for repeating the note, and the melody
+  // stops being one -- measured at 54% repeated notes with a direction weight
+  // of 2, against 20% once the unison is priced.
+  CHECK_MSG(intervalCost(0) > intervalCost(1), "a repeat must cost more than a step");
+  CHECK_MSG(intervalCost(0) > intervalCost(2), "and more than a whole tone");
+  CHECK_MSG(intervalCost(0) <= intervalCost(4), "but no more than a third");
 }
 
 TEST_CASE("the cost is deliberately not monotone in size") {
@@ -77,7 +87,7 @@ TEST_CASE("beyond an octave the cost grows without bound") {
   CHECK_MSG(intervalCost(13) > intervalCost(12), "a ninth must beat an octave");
 }
 
-TEST_CASE("no interval is ever cheaper than a step") {
+TEST_CASE("no interval ever costs less than nothing") {
   for (int d = 0; d <= 36; ++d)
     CHECK_MSG(intervalCost(d) >= 0, "negative cost at " + std::to_string(d));
 }
