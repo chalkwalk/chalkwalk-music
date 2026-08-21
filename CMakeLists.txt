@@ -9,16 +9,23 @@
 cmake_minimum_required(VERSION 3.22)
 project(chalkwalk_music VERSION 0.1.0 LANGUAGES CXX)
 
-# INTERFACE while everything here is header-only. This becomes a STATIC library
-# the moment the first .cpp arrives; nothing about the consumer-facing usage
-# (`chalkwalk::music`) changes when it does.
-add_library(chalkwalk_music INTERFACE)
+# STATIC since Notation and Harmony arrived. The header-only note this replaces
+# said "nothing about the consumer-facing usage changes when it does", and
+# nothing did: `chalkwalk::music` is still what a consumer links.
+#
+# Everything else here is still header-only and stays that way. These two are
+# compiled because they are large and because parsing a chord name is not
+# something every translation unit should pay for.
+add_library(chalkwalk_music STATIC
+    src/Notation.cpp
+    src/Harmony.cpp)
 add_library(chalkwalk::music ALIAS chalkwalk_music)
 
 target_include_directories(chalkwalk_music
-    INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
-target_compile_features(chalkwalk_music INTERFACE cxx_std_17)
+target_compile_features(chalkwalk_music PUBLIC cxx_std_17)
+set_target_properties(chalkwalk_music PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Tests only when built on its own, or when a parent explicitly asks. A parent
 # that pulls this in for the headers should not have to build Catch2.

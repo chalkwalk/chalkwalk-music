@@ -10,6 +10,8 @@ endif()
 
 add_executable(chalkwalk_music_tests
     EuclideanTests.cpp
+    HarmonyTests.cpp
+    NotationTests.cpp
     ScaleTests.cpp
     MetricGridTests.cpp
     AccentTests.cpp
