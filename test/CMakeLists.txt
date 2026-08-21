@@ -30,7 +30,13 @@ target_link_libraries(chalkwalk_music_tests
 # rather than a warning -- so an unguarded list breaks the Windows build at the
 # command line, before a single file is compiled.
 if(MSVC)
-    target_compile_options(chalkwalk_music_tests PRIVATE /W4)
+    # /Zc:preprocessor -- MSVC's traditional preprocessor treats __VA_ARGS__ as
+    # a single token, so the argument-count dispatch in the test harness picks
+    # the wrong macro and `expect(cond, msg)` becomes `CHECK((cond, msg))` --
+    # the comma operator, yielding the message. chalkwalk-ninjam hit this first
+    # and its note is worth repeating: it compiled on gcc and clang and failed
+    # only here, which is the whole argument for building on three.
+    target_compile_options(chalkwalk_music_tests PRIVATE /W4 /Zc:preprocessor)
 else()
     target_compile_options(chalkwalk_music_tests
         PRIVATE -Wall -Wextra -Wpedantic -Wshadow)
