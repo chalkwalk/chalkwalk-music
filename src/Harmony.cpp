@@ -648,6 +648,36 @@ std::string romanName(const Chord &chord, const Notation::Key &key) {
   return out;
 }
 
+Applied applyKey(const std::string &keyName, Session &session) {
+  const auto key = Notation::parseName(keyName);
+  if (!key.valid)
+    return Applied::Nothing;
+
+  // Not a change, so not an action: transposing a chart that has not moved
+  // would silently corrupt the one somebody wrote.
+  if (key == session.key)
+    return Applied::Nothing;
+
+  if (session.chartFromChat && session.key.valid)
+    session.chart = resolve(toRelative(session.chart, session.key), key);
+  else
+    session.chart = defaultChart(key);
+
+  session.key = key;
+  return Applied::Key;
+}
+
+Applied applyChart(const std::string &line, Session &session) {
+  Chart chart;
+  if (parseChart(line, chart) ||
+      (session.key.valid && parseDegreeChart(line, session.key, chart))) {
+    session.chart = std::move(chart);
+    session.chartFromChat = true;
+    return Applied::Chart;
+  }
+  return Applied::Nothing;
+}
+
 Chord resolutionChord(const Chart &chart, const Notation::Key &key) {
   const auto tonicTriad = key.valid ? modeChordOn(key, 0, false)
                                     : chordOn(0, Quality::Major);

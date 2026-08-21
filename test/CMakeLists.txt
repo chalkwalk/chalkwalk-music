@@ -12,6 +12,7 @@ add_executable(chalkwalk_music_tests
     EuclideanTests.cpp
     HarmonyTests.cpp
     NotationTests.cpp
+    SessionTests.cpp
     ScaleTests.cpp
     MetricGridTests.cpp
     AccentTests.cpp

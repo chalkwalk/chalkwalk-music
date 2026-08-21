@@ -272,6 +272,44 @@ bool parseChart(const std::string &text, Chart &out);
 bool parseDegreeChart(const std::string &text, const Notation::Key &key,
                       Chart &out);
 
+// ---------------------------------------------------------------------------
+// A room's harmony over time: the key, the chart, and what one does to the
+// other.
+//
+// The key and the chart are not independent. Change the key and a chart
+// somebody wrote should MOVE with it, while a chart the old key merely implied
+// should be replaced by the new key's own -- preserve what was written,
+// re-derive what was delegated. That rule is harmony rather than plumbing, and
+// it is the reason `toRelative` and `resolve` exist above.
+//
+// TEXT IN, and only the text this library can read: a key NAME and a chart
+// LINE. How either arrived -- a `[key: ...]` tag, a slash command, a topic --
+// is a convention of whatever carries them, and not something a music library
+// should know. The caller extracts; this decides what it means.
+
+struct Session {
+  Notation::Key key;
+  Chart chart;
+
+  // Whether the chart is one somebody wrote, or one the key implied. This is
+  // what a key change turns on: a chart nobody chose has nothing worth
+  // transposing, and moving it would carry the old key's default into a key
+  // with a perfectly good default of its own.
+  bool chartFromChat = false;
+};
+
+enum class Applied { Nothing, Key, Chart };
+
+// "D minor". Moves a written chart with the key and rebuilds a defaulted one.
+//
+// Re-announcing the key the room is already in is NOTHING, not a change:
+// acting on it would transpose a chart that has not moved.
+Applied applyKey(const std::string &keyName, Session &session);
+
+// "| Am | F | C | G |", or "| ii | V | I |" against the key the session is
+// already in. Degrees need a key and are refused without one.
+Applied applyChart(const std::string &line, Session &session);
+
 // The chord a loop resolves to: what an ending lands on.
 //
 // The room's own tonic chord if the chart contains one, otherwise the mode's
