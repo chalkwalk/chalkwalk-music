@@ -24,7 +24,7 @@ add_library(chalkwalk::music ALIAS chalkwalk_music)
 target_include_directories(chalkwalk_music
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
-target_compile_features(chalkwalk_music PUBLIC cxx_std_20)
+target_compile_features(chalkwalk_music PUBLIC cxx_std_17)
 set_target_properties(chalkwalk_music PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Tests only when built on its own, or when a parent explicitly asks. A parent
